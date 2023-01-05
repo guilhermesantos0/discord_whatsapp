@@ -4,7 +4,7 @@ const wweb = require('whatsapp-web.js');
 const Discord = require('discord.js');
 const config = require('./config.json');
 let channels = require('./channels.json');
-
+let messages = require('./messages.json');
 
 let discordConfig = {};
 
@@ -32,6 +32,7 @@ const wClient = new wweb.Client({
 })
 
 typeof(channels) == 'string' ? channels = JSON.parse(channels) : channels = channels
+typeof(messages) == 'string' ? messages = JSON.parse(messages) : messages = messages
 
 wClient.on('message', async(message) => {
 
@@ -51,7 +52,7 @@ wClient.on('message', async(message) => {
             .setColor(config.embedColor)
 
             const btn = new Discord.ButtonBuilder()
-            .setCustomId(`ans_${message.id.id}`)
+            .setCustomId(`ans`)
             .setLabel("Responder")
             .setEmoji('994087537230479380')
             .setStyle(Discord.ButtonStyle.Primary)
@@ -59,7 +60,16 @@ wClient.on('message', async(message) => {
             const row = new Discord.ActionRowBuilder()
             .setComponents(btn)
 
-            groupChannel.send({ embeds: [embed], components: [row] })
+            
+            groupChannel.send({ embeds: [embed], components: [row] }).then(msg => {
+                let msgData = {
+                    sender: contact,
+                    chat: chat,
+                    id: message.id._serialized
+                }
+
+                messages[msg.id] = msgData
+            })
         }else{
 
             discordConfig.guild.channels.create({
@@ -75,7 +85,7 @@ wClient.on('message', async(message) => {
                 .setColor(config.embedColor)
 
                 const btn = new Discord.ButtonBuilder()
-                .setCustomId(`ans_${message.id.id}`)
+                .setCustomId(`ans`)
                 .setLabel("Responder")
                 .setEmoji('994087537230479380')
                 .setStyle(Discord.ButtonStyle.Primary)
@@ -83,7 +93,13 @@ wClient.on('message', async(message) => {
                 const row = new Discord.ActionRowBuilder()
                 .setComponents(btn)
 
-                c.send({ embeds: [embed], components: [row] })
+                c.send({ embeds: [embed], components: [row] }).then(msg => {
+                    messages[msg.id] = {
+                        sender: contact,
+                        chat: chat,
+                        id: message.id._serialized
+                    }
+                })
 
                 channels.groups[chat.id._serialized] = c
             })
@@ -102,7 +118,7 @@ wClient.on('message', async(message) => {
             .setColor(config.embedColor)
 
             const btn = new Discord.ButtonBuilder()
-            .setCustomId(`ans_${message.id.id}`)
+            .setCustomId(`ans`)
             .setLabel("Responder")
             .setEmoji('994087537230479380')
             .setStyle(Discord.ButtonStyle.Primary)
@@ -110,7 +126,13 @@ wClient.on('message', async(message) => {
             const row = new Discord.ActionRowBuilder()
             .setComponents(btn)
 
-            cttChannel.send({ embeds: [embed], components: [row] })
+            cttChannel.send({ embeds: [embed], components: [row] }).then(msg => {
+                messages[msg.id] = {
+                    sender: contact,
+                    chat: chat,
+                    id: message.id._serialized
+                }
+            })
 
         }else{
 
@@ -127,7 +149,7 @@ wClient.on('message', async(message) => {
                 .setColor(config.embedColor)
 
                 const btn = new Discord.ButtonBuilder()
-                .setCustomId(`ans_${message.id.id}`)
+                .setCustomId(`ans`)
                 .setLabel("Responder")
                 .setEmoji('994087537230479380')
                 .setStyle(Discord.ButtonStyle.Primary)
@@ -135,7 +157,15 @@ wClient.on('message', async(message) => {
                 const row = new Discord.ActionRowBuilder()
                 .setComponents(btn)
 
-                c.send({ embeds: [embed], components: [row] })
+                c.send({ embeds: [embed], components: [row] }).then(msg => {
+                    let msgData = {
+                        sender: contact,
+                        chat: chat,
+                        id: message.id._serialized
+                    }
+    
+                    messages[msg.id] = msgData
+                })
 
                 channels.pv[message.from] = c
             })
@@ -288,6 +318,8 @@ dClient.on('messageCreate', async (message) => {
     if(!message.content) return
 
     if(message.content.startsWith('!set')){
+
+        message.channel.bulkDelete(3)
         let msgContentArr = message.content.split(' ')
 
         if(msgContentArr.length < 3) return message.channel.send('tu q desenvolveu o bot e nao sabe usar?')
@@ -310,7 +342,6 @@ dClient.on('messageCreate', async (message) => {
         .setDescription(`> Categoria do PV:\n${pvParent.name}\n\n> Categoria de Grupos:\n${groupParent.name}\n\n*Iniciando bot do Whatsapp*\n**Comando:** \`${message.content}\``)
         .setColor(config.embedColor)
 
-        message.delete()
         message.channel.send({ embeds: [embed] })
 
         console.log('tudo certo! iniciando bot!')
@@ -330,12 +361,13 @@ dClient.on('messageCreate', async (message) => {
 
         channels[type][`55${id}@c.us`] = message.channel
 
-        let ctt = await wClient.getContactById(`${id}@c.us`)
+        let ctt = await wClient.getContactById(`55${id}@c.us`)
+        console.log(ctt)
 
         const embed = new Discord.EmbedBuilder()
         .setTitle('Canal adicionado!')
-        .setDescription(`Contato:\n> ${ctt.name}\nNúmero: > ${id}`)
-        .setColor(config.embed)
+        .setDescription(`Contato:\n> ${ctt.name}\nNúmero:\n> ${id}`)
+        .setColor(config.embedColor)
 
         message.delete()
         return message.channel.send({ embeds: [embed] })
@@ -358,18 +390,17 @@ dClient.on('messageCreate', async (message) => {
 
 dClient.on('interactionCreate',async(interaction) => {
     interaction.deferUpdate()
-    if(interaction.customId.startsWith('ans_')){
-        let msgId = interaction.customId.split('ans_')[1]
-        let chatId = getPVChannel(interaction.channel.id)
+    if(interaction.customId == 'ans'){
+
+        let msgData = messages[interaction.message.id]
+
+        let chatId = getPVChannel(msgData.chat.id._serialized)
         if(!chatId){
-            chatId = getGroupChannel(interaction.channel.id)
+            chatId = getGroupChannel(msgData.chat.id._serialized)
             if(!chatId) return
 
-            let cId = chatId.split('@c.us')[0]
-
-            let chat = wClient.getChatById(cId)
-            let chatMessages = await chat.fetchMessages()
-            let ansMsg = chatMessages.find(i => i.id == msgId)
+            let chatMessages = await msgData.chat.fetchMessages()
+            let ansMsg = chatMessages.find(i => i.id == msgData.id)
 
             if(ansMsg){
 
@@ -401,11 +432,9 @@ dClient.on('interactionCreate',async(interaction) => {
                 })
             }
         }else{
-            let cId = chatId.split('@c.us')[0]
 
-            let chat = wClient.getChatById(cId)
-            let chatMessages = await chat.fetchMessages()
-            let ansMsg = chatMessages.find(i => i.id == msgId)
+            let chatMessages = await msgData.chat.fetchMessages()
+            let ansMsg = chatMessages.find(i => i.id == msgData.id)
 
             if(ansMsg){
 
@@ -447,6 +476,11 @@ setInterval(() => {
         JSON.stringify(channels), 
         function(err) {if(err) console.log(err)}
     )
+    fs.writeFile(
+        'messages.json',
+        JSON.stringify(messages),
+        function(err) {if(err) console.log(err)}
+    )
     console.log('salvou aqui')
 },300000)
 
@@ -477,7 +511,12 @@ dClient.on('error', error => {
         JSON.stringify(channels), 
         function(err) {if(err) console.log(err)}
     )
-    console.log(`Houve um erro, tudo foi salvo.\nErro: ${error.name}\n\n${error.name}`)
+    fs.writeFile(
+        'messages.json',
+        JSON.stringify(messages),
+        function(err) {if(err) console.log(err)}
+    )
+    console.log(`Houve um erro, tudo foi salvo.\nErro: ${error.name}\n\n${error.message}`)
 })
 
 dClient.login(config.token)
